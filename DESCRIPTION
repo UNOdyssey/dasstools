@@ -1,4 +1,4 @@
-Package: unodctools
+Package: dasstools
 Type: Package
 Title:  Tools for UNODC SDMX Data Checks and Excel Sensitivity Labeling
 Version: 0.1.0
@@ -21,3 +21,4 @@ Imports:
     rlang
 RoxygenNote: 7.3.3
 License: file LICENSE
+
