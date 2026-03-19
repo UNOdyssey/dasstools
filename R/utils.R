@@ -3,6 +3,7 @@
 
 #' @importFrom data.table is.data.table haskey key copy setkeyv setorderv shift setnames fifelse
 #' @importFrom stringr str_count str_extract str_split regex
+#' @importFrom openxlsx2 wb_load wb_save wb_add_mips
 NULL
 
 # Silence data.table NSE notes in R CMD check

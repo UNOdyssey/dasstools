@@ -1,7 +1,7 @@
 Package: dasstools
 Type: Package
 Title:  Tools for UNODC SDMX Data Checks and Excel Sensitivity Labeling
-Version: 0.1.1
+Version: 0.1.2
 Authors@R: c(
     person(
       "Markus_Schwabe", "Christian_Halaby",
@@ -18,7 +18,8 @@ Depends:
     data.table
 Imports:
     stringr,
-    rlang
+    rlang,
+    openxlsx2
 RoxygenNote: 7.3.3
 License: file LICENSE
 

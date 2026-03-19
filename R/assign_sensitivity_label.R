@@ -1,155 +1,73 @@
-#' Function assign_sensitivity_label
-#'v1.02
-#' This function assigns an UN sensitivity label to a Excel file.
-#' It launches through PowerShell from R to run an Excel VBA macro inside a
-#' specified .xlsx workbook. It opens the workbook, executes the macro with
-#' user-provided parameters, and then closes Excel cleanly.
+#' Assign a UN Sensitivity Label to an Excel Workbook
 #'
-#' @param target_file Character string. Path to the input file that the VBA
-#'   macro should process. The file must exist.
+#' This function embeds a UN-compliant Microsoft Information Protection (MIP)
+#' sensitivity label directly into an Excel `.xlsx` file by injecting the
+#' required XML metadata. Unlike previous implementations that relied on
+#' PowerShell, COM automation, or external VBA macros, this version applies
+#' sensitivity labels natively using the **openxlsx2** engine.
 #'
-#' @param label Character string. Sensitivity label to apply. Must be one of:
-#'   "Public", "Unclassified", "Confidential", or "Strictly Confidential".
+#' The function loads an existing workbook, adds the appropriate MIP XML
+#' corresponding to the selected label ("Unclassified", "Public", or
+#' "Confidential"), and then saves the workbook in-place. No external
+#' dependencies, macros, or Windows-only features are required.
 #'
-#' @param macro_host Character string. Path to the Excel .xlsm file containing
-#'   the VBA macro to run.
+#' @param filename_full_dir Character string. The full file path of the Excel
+#'   workbook to modify (e.g., `"C:/folder/myfile.xlsx"`). The file must already
+#'   exist and be a valid `.xlsx` file.
 #'
-#' @param macro_name Character string. The full VBA macro name to execute,
-#'   including module name if required (e.g., "Module1.MyMacro").
-
-#' @return A list with:
-#'   \item{output}{Character vector of PowerShell output (stdout/stderr).}
-#'   \item{status}{Exit status code from system2 (0 = success).}
+#' @param selected_label Character string. The sensitivity label to assign.
+#'   Must be one of:
+#'   - `"Unclassified"`
+#'   - `"Public"`
+#'   - `"Confidential"`
 #'
 #' @details
-#' The function builds a PowerShell script that:
-#'   - launches Excel via COM automation,
-#'   - runs the specified VBA macro with arguments,
-#'   - closes Excel and cleans up orphan processes.
+#' This function works by injecting a `<clbl:labelList>` XML element compliant
+#' with the Microsoft Information Protection (MIP) schema. Each supported label
+#' corresponds to a predefined GUID and metadata block that Excel and other
+#' Office applications recognize as an applied sensitivity classification.
+#'
+#' Only the metadata is written; no content scanning or encryption is performed.
+#' The file is overwritten in-place using `openxlsx2::wb_save()`.
+#'
+#' @return
+#' Invisibly returns `TRUE` on success. The function is called for its side
+#' effects (writing the label metadata to the file).
 #'
 #' @examples
 #' \dontrun{
-#' assign_sensitivity_label(
-#'   target_file = "C:/mypath/myfile.xlsx",
-#'   label = "Confidential",
-#'   macro_host = "C:/mypath/apply_sensitivity_labels.xlsm",
-#'   macro_name = "ApplySensitivityLabelToFileMain"
+#' assign_label(
+#'   filename_full_dir = "C:/data/myworkbook.xlsx",
+#'   selected_label    = "Confidential"
 #' )
 #' }
-
-
+#'
 #' @export
-assign_sensitivity_label <- function(
-    target_file,
-    label,
-    macro_host = NULL,
-    macro_name = "ApplySensitivityLabelToFileMain"
-) {
 
-  if (Sys.info()[["sysname"]] != "Windows") {
-    stop("assign_sensitivity_label() only works on Windows (PowerShell + Excel COM required).")
-  }
+# Add label
+assign_label <- function(filename_full_dir, selected_label){
 
-  if (is.null(macro_host)) {
-    stop("Please provide macro_host path (Excel .xlsm file containing the macro).")
-  }
+  # filename_full_dir  ful path to the file and the file name
+  # Step 1 create a data frame with the labels and their metadata
+  labels_class <- data.frame(c("Unclassified", "Public", "Confidential"),
+                             c('<clbl:labelList xmlns:clbl=\"http://schemas.microsoft.com/office/2020/mipLabelMetadata\"><clbl:label id=\"{8b77875e-5908-45a0-9cb4-dec9ae074618}\" enabled=\"1\" method=\"Privileged\" siteId=\"{0f9e35db-544f-4f60-bdcc-5ea416e6dc70}\" removed=\"0\"/></clbl:labelList>',
+                               '<clbl:labelList xmlns:clbl=\"http://schemas.microsoft.com/office/2020/mipLabelMetadata\"><clbl:label id=\"{606bed3f-efae-4d70-a15b-866bb27c918d}\" enabled=\"1\" method=\"Privileged\" siteId=\"{0f9e35db-544f-4f60-bdcc-5ea416e6dc70}\" contentBits=\"0\" removed=\"0\"/></clbl:labelList>' ,
+                               '<clbl:labelList xmlns:clbl=\"http://schemas.microsoft.com/office/2020/mipLabelMetadata\"><clbl:label id=\"{7eb58d0f-f804-411f-a20e-09ebfae62b4c}\" enabled=\"1\" method=\"Privileged\" siteId=\"{0f9e35db-544f-4f60-bdcc-5ea416e6dc70}\" contentBits=\"0\" removed=\"0\"/></clbl:labelList>'
+                             ))
 
-  if (!file.exists(macro_host)) {
-    stop(sprintf("macro_host file not found: %s", macro_host))
-  }
-  if (!grepl("\\.xlsm$", macro_host, ignore.case = TRUE)) {
-    stop("macro_host must be an Excel .xlsm file.")
-  }
+  colnames(labels_class)[] <- c("label", "label_codes")
+  # Step 2 Upload the existing workbook using openxlsx
+  new_wb <-  openxlsx2::wb_load(filename_full_dir)
 
+  selected_label_code <- labels_class$label_codes[labels_class$label==selected_label]
 
-  error_message <- function(msg) {
-    # Build a call string like base R's "Error in <call>: ..."
-    call <- deparse(sys.call(-1))
-    # ANSI codes: red = \033[31m, bold red = \033[1;31m, reset = \033[0m
-    red   <- "\033[31m"
-    reset <- "\033[0m"
-    message(sprintf("%sError in %s: %s%s", red, call, msg, reset))
-  }
+  # --- STEP 3: Apply the label ---
+  # This injects the proprietary XML metadata into the new file
+  new_wb <-openxlsx2:: wb_add_mips(new_wb, xml = selected_label_code)
 
 
-  #bulk processing will be implemented later
-  if (length(target_file)>1) {
-    error_message("You supplied more than one file. Please provide exactly one file for processing.")
-    return(invisible(NULL))
-  }
+  # --- STEP 4: Save the file ---
+  openxlsx2::wb_save(new_wb, paste0(filename_full_dir),  overwrite = TRUE)
 
-  #validate the sensitivity label
-  valid_labels <- c("Public","Unclassified","Confidential","Strictly Confidential")
-  if (!(label %in% valid_labels)) {
-    error_message(paste0(
-      "The sensitivity label '", label, "' isn't supported.\n",
-      "Valid options: ", paste(valid_labels, collapse = ", "), ".\n",
-      "Note: 'Strictly Confidential - Additional Protection' is not implemented.\n",
-      "More info: https://iseek.un.org/department/m365-information-sensitivity-labels."
-    ))
-    return(invisible(NULL))
-  }
-
-  #validate the list of files extensions
-  invalid_ext <- !grepl("\\.xlsx$", target_file, ignore.case = TRUE)
-  if (any(invalid_ext)) {
-    error_message(paste0(
-      "The following file(s) are not valid Excel .xlsx files: \n - ",
-      paste(target_file[invalid_ext], collapse = "\n  - ")
-    ))
-    return(invisible(NULL))
-  }
-
-  #confirm file existence
-  missing_files <- !file.exists(target_file)
-  if (any(missing_files)) {
-    error_message(paste0(
-      "The following file(s) do not exist: \n - ",
-      paste(target_file[missing_files], collapse = "\n - "),
-      sep = "\n  - "
-    ))
-    return(invisible(NULL))
-  }
-
-  keep <- !(invalid_ext | missing_files)
-  target_file <- target_file[keep]
-
-  # If macro_host contains "[user]" placeholder, replace it with the Windows username (capitalized)
-  if (grepl("\\[user\\]", macro_host, fixed = FALSE)) {
-    ucfirst <- function(x) paste0(toupper(substring(x, 1, 1)), substring(x, 2))
-    user_uc <- ucfirst(Sys.getenv("USERNAME"))
-    macro_host <- sub("\\[user\\]", user_uc, macro_host)
-  }
-
-
-  # Use Windows backslashes for Excel
-  macro_host  <- normalizePath(macro_host, winslash = "\\", mustWork = TRUE)
-  target_file <- normalizePath(target_file, winslash = "\\", mustWork = TRUE)
-
-  ps <- paste0(
-    "$ErrorActionPreference = 'Stop'; ",
-    '$excel = New-Object -ComObject Excel.Application; ',
-    '$excel.Visible = $false; $excel.DisplayAlerts = $false; ',
-    '$wb = $excel.Workbooks.Open(', "'", macro_host, "'", '); ',
-    '$excel.Run(', "'", macro_name, "'", ', ', "'", target_file, "'", ', ', "'", label, "'", '); ',
-    '$wb.Close($false); ',
-    '$excel.Quit(); ',
-    '[System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null; ',
-    'Start-Sleep -Milliseconds 200; ',
-    'Get-Process -Name EXCEL -ErrorAction SilentlyContinue | ForEach-Object { if ($_.MainWindowHandle -eq 0) { $_ | Stop-Process -Force } }'
-  )
-
-  out <- system2(
-    command = "powershell.exe",
-    args    = c("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps),
-    stdout  = TRUE,
-    stderr  = TRUE
-  )
-
-  status <- attr(out, "status"); if (is.null(status)) status <- 0
-  if (status!=0) list(output = out, status = status)
-
-  if (status==0) message(paste0("Sensitivity label '",label,"' successfully assigned to : ", target_file))
-  return(invisible(NULL))
 
 }
