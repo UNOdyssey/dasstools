@@ -210,8 +210,13 @@ check.data <- function(x, col,
   if (!is.null(filter)) {
     temp <- temp[eval(parse(text = filter))]
     if (nrow(temp) == 0L) {
-      out <- temp[0][, `:=`(value_computed = 0, check = NA, 
-        rule = NA)]
+     out <- temp[0][, `:=`(
+  value_computed = NA_real_,
+  check          = NA,
+  d_abs          = NA_real_,
+  d_rel          = NA_real_,
+  rule           = NA
+)]
       setkeyv(out, key(x))
       return(out)
     }
@@ -231,8 +236,13 @@ check.data <- function(x, col,
         paste(allowed, collapse = ", "), after, before))
     }
     if (after == 0L) {
-      out <- temp[0][, `:=`(value_computed = 0, check = NA, 
-        rule = NA)]
+     out <- temp[0][, `:=`(
+  value_computed = NA_real_,
+  check          = NA,
+  d_abs          = NA_real_,
+  d_rel          = NA_real_,
+  rule           = NA
+)]
       setkeyv(out, key(x))
       return(out)
     }
@@ -240,8 +250,13 @@ check.data <- function(x, col,
   if (check_type %in% c("sum", "max", "min", "const")) {
     temp_left <- temp[get(col) %chin% new_code]
     if (nrow(temp_left) == 0L) {
-      out <- temp[0][, `:=`(value_computed = 0, check = NA, 
-        rule = NA)]
+      out <- temp[0][, `:=`(
+  value_computed = NA_real_,
+  check          = NA,
+  d_abs          = NA_real_,
+  d_rel          = NA_real_,
+  rule           = NA
+)]
       setkeyv(out, key(x))
       return(out)
     }
@@ -249,8 +264,13 @@ check.data <- function(x, col,
       temp[get(col) %chin% codes]
     else temp
     if (nrow(temp_right) == 0L) {
-      out <- temp[0][, `:=`(value_computed = 1, check = NA, 
-        rule = NA)]
+    out <- temp[0][, `:=`(
+  value_computed = NA_real_,
+  check          = NA,
+  d_abs          = NA_real_,
+  d_rel          = NA_real_,
+  rule           = NA
+)]
       setkeyv(out, key(x))
       return(out)
     }
@@ -290,8 +310,13 @@ check.data <- function(x, col,
           paste(excluded, collapse = ", "), after, before))
       }
       if (after == 0L) {
-        out <- temp[0][, `:=`(value_computed = 0, check = NA, 
-          rule = NA)]
+       out <- temp[0][, `:=`(
+  value_computed = NA_real_,
+  check          = NA,
+  d_abs          = NA_real_,
+  d_rel          = NA_real_,
+  rule           = NA
+)]
         setkeyv(out, key(x))
         return(out)
       }
