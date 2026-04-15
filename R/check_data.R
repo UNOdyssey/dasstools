@@ -133,28 +133,26 @@ check.data <- function(x, col,
   #### ---- Input checks ----
 
   if (!is.data.table(x) || !haskey(x)) {
-    warning(sprintf("Error: '%s' must be a keyed data.table.", deparse(substitute(x))), call. = FALSE)
+    warning(sprintf("Error: '%s' must be a keyed data.table.", 
+      deparse(substitute(x))), call. = FALSE)
     return(NA)
   }
-
-  num <- setdiff(names(x)[sapply(x, is.numeric)], c("upper_bound", "lower_bound"))
+  num <- setdiff(names(x)[sapply(x, is.numeric)], c("upper_bound", 
+    "lower_bound"))
   if (length(num) != 1) {
-    warning(sprintf(
-      "Error: Expected one numeric column (excluding 'upper_bound' and 'lower_bound'), found %d: %s.",
-      length(num),
-      paste(num, collapse = ", ")
-    ), call. = FALSE)
+    warning(sprintf("Error: Expected one numeric column (excluding 'upper_bound' and 'lower_bound'), found %d: %s.", 
+      length(num), paste(num, collapse = ", ")), call. = FALSE)
     return(NA)
   }
-
   col <- deparse(substitute(col))
   if (!(col %in% names(x))) {
-    warning(sprintf("Error: Column '%s' not found in data.table.", col), call. = FALSE)
+    warning(sprintf("Error: Column '%s' not found in data.table.", 
+      col), call. = FALSE)
     return(NA)
   }
-
   if (!is.numeric(tolerance) || length(tolerance) != 2) {
-    warning("Error: 'tolerance' must be numeric c(abs, rel).", call. = FALSE)
+    warning("Error: 'tolerance' must be numeric c(abs, rel).", 
+      call. = FALSE)
     return(NA)
   }
 
@@ -162,194 +160,177 @@ check.data <- function(x, col,
 
   rule <- gsub(" ", "", rule, fixed = TRUE)
   operator_pattern <- "(<=|>=|!=|==|>|<)"
-
-  bad_syntax <-
-    (!grepl(operator_pattern, rule, perl = TRUE) &&
-       !grepl("^yoy$|^yo[0-9]+y$", rule)) ||
-    str_count(rule, operator_pattern) > 1
-
+  bad_syntax <- (!grepl(operator_pattern, rule, perl = TRUE) && 
+    !grepl("^yoy$|^yo[0-9]+y$", rule)) || str_count(rule, 
+    operator_pattern) > 1
   if (bad_syntax) {
-    warning(sprintf("Error: The syntax of the validation rule '%s' is wrong.", rule), call. = FALSE)
+    warning(sprintf("Error: The syntax of the validation rule '%s' is wrong.", 
+      rule), call. = FALSE)
     return(NA)
   }
-
   if (grepl("-|\\*|:", rule)) {
-    warning(sprintf("Error: Operator '%s' is not allowed.", str_extract(rule, "-|\\*|:")), call. = FALSE)
+    warning(sprintf("Error: Operator '%s' is not allowed.", 
+      str_extract(rule, "-|\\*|:")), call. = FALSE)
     return(NA)
   }
 
   #### ---- Determine type of check ----
 
   if (grepl("^yoy$|^yo[0-9]+y$", rule)) {
-
     check_type <- "timeseries"
-
-  } else {
-
+  }
+  else {
     parts <- str_split_1(rule, operator_pattern)
-    op    <- str_extract(rule, operator_pattern)
-    left  <- parts[1]
+    op <- str_extract(rule, operator_pattern)
+    left <- parts[1]
     right <- parts[2]
-
     check_type <- str_extract(rule, "max|min|sum")
-    if (is.na(check_type)) check_type <- "sum"
-
+    if (is.na(check_type)) 
+      check_type <- "sum"
     right_clean <- gsub("\\(|\\)|max|min|sum", "", right)
-
     codes <- if (right_clean == "...") {
       setdiff(unique(x[[col]]), left)
-    } else {
-      if (check_type == "sum") str_split_1(right_clean, "[,\\+]") else str_split_1(right_clean, "\\+")
     }
-
+    else {
+      if (check_type == "sum") 
+        str_split_1(right_clean, "[,\\+]")
+      else str_split_1(right_clean, "\\+")
+    }
     if (check_type == "sum" && length(codes) == 1 && !is.na(suppressWarnings(as.numeric(codes)))) {
       codes <- as.numeric(codes)
       check_type <- "const"
     }
-
     new_code <- left
   }
 
   #### ---- Apply check ----
 
-  temp <- copy(x)
+   temp <- copy(x)
   by <- setdiff(key(temp), col)
-
   if (!is.null(filter)) {
     temp <- temp[eval(parse(text = filter))]
     if (nrow(temp) == 0L) {
-      out <- temp[0][, `:=`(value_computed = 0, check = NA, rule = NA)]
+      out <- temp[0][, `:=`(value_computed = 0, check = NA, 
+        rule = NA)]
       setkeyv(out, key(x))
       return(out)
     }
   }
 
   #### ---- Logical checks ----
-
-  is_sum_like <- exists("op") && op == "==" && check_type %in% c("sum", "const")
-
+  
+  is_sum_like <- exists("op") && op == "==" && check_type %in% 
+    c("sum", "const")
   if (is_sum_like && "unit_measure" %in% names(temp)) {
     allowed <- c("NB", "NB_SAMPLE", "PCT_DIST")
-    before  <- nrow(temp)
-    temp    <- temp[unit_measure %chin% allowed]
-    after   <- nrow(temp)
-
+    before <- nrow(temp)
+    temp <- temp[unit_measure %chin% allowed]
+    after <- nrow(temp)
     if (before != after) {
-      message(sprintf(
-        "Equality check on totals: kept only rows with unit_measure {%s}. %d/%d rows retained.",
-        paste(allowed, collapse=", "), after, before
-      ))
+      message(sprintf("Equality check on totals: kept only rows with unit_measure {%s}. %d/%d rows retained.", 
+        paste(allowed, collapse = ", "), after, before))
     }
-
     if (after == 0L) {
-      out <- temp[0][, `:=`(value_computed = 0, check = NA, rule = NA)]
+      out <- temp[0][, `:=`(value_computed = 0, check = NA, 
+        rule = NA)]
       setkeyv(out, key(x))
       return(out)
     }
   }
-
-  if (check_type %in% c("sum","max","min","const")) {
-
+  if (check_type %in% c("sum", "max", "min", "const")) {
     temp_left <- temp[get(col) %chin% new_code]
     if (nrow(temp_left) == 0L) {
-      out <- temp[0][, `:=`(value_computed=0, check=NA, rule=NA)]
+      out <- temp[0][, `:=`(value_computed = 0, check = NA, 
+        rule = NA)]
       setkeyv(out, key(x))
       return(out)
     }
-
-    temp_right <- if (check_type != "const") temp[get(col) %chin% codes] else temp
+    temp_right <- if (check_type != "const") 
+      temp[get(col) %chin% codes]
+    else temp
     if (nrow(temp_right) == 0L) {
-      out <- temp[0][, `:=`(value_computed=1, check=NA, rule=NA)]
+      out <- temp[0][, `:=`(value_computed = 1, check = NA, 
+        rule = NA)]
       setkeyv(out, key(x))
       return(out)
     }
-
     temp_right[[col]] <- new_code
-
-    agg <- temp_right[, .(
-      value_computed = switch(check_type,
-                              sum = sum(get(num)),
-                              min = min(get(num)),
-                              max = max(get(num)),
-                              const = codes
-      )
-    ), by = by]
-
+    agg <- temp_right[, .(value_computed = switch(check_type, 
+      sum = sum(get(num)), min = min(get(num)), max = max(get(num)), 
+      const = codes)), by = by]
     result <- merge(temp_left, agg, by = by, all = TRUE)
-
     if (op == "==") {
       abs_tol <- tolerance[1]
       rel_tol <- tolerance[2]
-      result[, d_abs := abs(get(num) - value_computed)]
-      result[, d_rel := d_abs / pmax(abs(value_computed), 1e-12)*100]
-      result[, check := (d_abs <= abs_tol) | (d_rel <= rel_tol)]
-    } else {
-      result[, check := eval(parse(text = sprintf("%s %s value_computed", num, op)))]
+      result[, `:=`(d_abs, abs(get(num) - value_computed))]
+      result[, `:=`(d_rel, d_abs/pmax(abs(value_computed), 
+        1e-12) * 100)]
+      result[, `:=`(check, (d_abs <= abs_tol) | (d_rel <= 
+        rel_tol))]
+    }
+    else {
+      result[, `:=`(check, eval(parse(text = sprintf("%s %s value_computed", 
+        num, op))))]
     }
   }
 
   #### ---- Time-series checks ----
-
   if (check_type == "timeseries") {
-
-    years_back <- if (rule == "yoy") 1 else as.numeric(sub("yo([0-9]+)y", "\\1", rule))
-
+    years_back <- if (rule == "yoy") 
+      1
+    else as.numeric(sub("yo([0-9]+)y", "\\1", rule))
     if ("unit_measure" %in% names(temp)) {
-      excluded <- c("YES_NO_UNK","SCALE_L5","SCALE_10","PCT_BOUND")
+      excluded <- c("YES_NO_UNK", "SCALE_L5", "SCALE_10", 
+        "PCT_BOUND")
       before <- nrow(temp)
       temp <- temp[!(unit_measure %chin% excluded)]
       after <- nrow(temp)
-
       if (before != after) {
-        message(sprintf(
-          "Time-series check: removed categorical or bounded unit_measure {%s}. %d/%d rows kept.",
-          paste(excluded, collapse=", "), after, before
-        ))
+        message(sprintf("Time-series check: removed categorical or bounded unit_measure {%s}. %d/%d rows kept.", 
+          paste(excluded, collapse = ", "), after, before))
       }
-
       if (after == 0L) {
-        out <- temp[0][, `:=`(value_computed=0, check=NA, rule=NA)]
+        out <- temp[0][, `:=`(value_computed = 0, check = NA, 
+          rule = NA)]
         setkeyv(out, key(x))
         return(out)
       }
     }
-
     if (!is.numeric(temp[[col]])) {
-      temp[, (col) := as.numeric(get(col))]
+      temp[, `:=`((col), as.numeric(get(col)))]
       if (all(is.na(temp[[col]]))) {
-        warning(sprintf("Error: Column '%s' cannot be converted to numeric.", col), call. = FALSE)
+        warning(sprintf("Error: Column '%s' cannot be converted to numeric.", 
+          col), call. = FALSE)
         return(NA)
       }
     }
-
     setorderv(temp, c(by, col))
-
-    temp[, .count := .N, by = by]
+    temp[, `:=`(.count, .N), by = by]
     temp <- temp[.count >= (years_back + 1L)]
-    temp[, .count := NULL]
-
-    temp[, prev_year  := shift(get(col)), by = by]
-    temp[, prev_value := shift(get(num)), by = by]
+    temp[, `:=`(.count, NULL)]
+    temp[, `:=`(prev_year, shift(get(col))), by = by]
+    temp[, `:=`(prev_value, shift(get(num))), by = by]
     temp <- temp[!is.na(prev_year)]
-
-    temp[, d_abs := abs(get(num) - prev_value)]
-    temp[, d_rel := fifelse(prev_value != 0, round(abs((get(num)-prev_value)/prev_value)*100, 0), NA_real_)] #Round to 0 decimals
-
+    temp[, `:=`(d_abs, abs(get(num) - prev_value))]
+    temp[, `:=`(d_rel, fifelse(prev_value != 0, round(abs((get(num) - 
+      prev_value)/prev_value) * 100, 0), NA_real_))]
     abs_tol <- tolerance[1]
     rel_tol <- tolerance[2]
-    temp[, check := fifelse(is.na(prev_value), NA, d_abs <= abs_tol | d_rel <= rel_tol)]
-
-    setnames(temp, "d_abs", paste0(num,"_abs_change"))
-    setnames(temp, "d_rel", paste0(num,"_rel_change"))
-
+    temp[, `:=`(check, fifelse(is.na(prev_value), NA, d_abs <= 
+      abs_tol | d_rel <= rel_tol))]
+    setnames(temp, "d_abs", paste0(num, "_abs_change"))
+    setnames(temp, "d_rel", paste0(num, "_rel_change"))
     result <- temp
   }
-
+  
   #### ---- Add metadata ----
-  result[, rule := paste0(col, ": ", rule)]
-  if (!is.null(label)) result[, label := label]
-  if (!is.null(id))    result[, id := id]
-  if (!keep_valid) result <- result[check == FALSE]
+  result[, `:=`(rule, paste0(col, ": ", rule))]
+  if (!is.null(label)) 
+    result[, `:=`(label, label)]
+  if (!is.null(id)) 
+    result[, `:=`(id, id)]
+  if (!keep_valid) 
+    result <- result[check == FALSE]
 
   #### ---- Restore original key ----
   setkeyv(result, key(x))
