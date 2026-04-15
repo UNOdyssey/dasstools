@@ -282,9 +282,13 @@ check.data <- function(x, col,
     if (op == "==") {
       abs_tol <- tolerance[1]
       rel_tol <- tolerance[2]
-      result[, `:=`(d_abs, abs(get(num) - value_computed))]
-      result[, `:=`(d_rel, d_abs/pmax(abs(value_computed), 
-        1e-12) * 100)]
+      result[, d_abs := abs(get(num) - value_computed)]
+
+result[, d_rel := fifelse(
+  value_computed == 0,
+  NA_real_,
+  d_abs / abs(value_computed) * 100
+)]
       result[, `:=`(check, (d_abs <= abs_tol) | (d_rel <= 
         rel_tol))]
     }
