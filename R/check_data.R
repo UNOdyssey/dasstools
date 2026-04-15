@@ -288,10 +288,13 @@ check.data <- function(x, col,
       result[, `:=`(check, (d_abs <= abs_tol) | (d_rel <= 
         rel_tol))]
     }
-    else {
-      result[, `:=`(check, eval(parse(text = sprintf("%s %s value_computed", 
-        num, op))))]
-    }
+else {
+  result[, `:=`(
+    check = eval(parse(text = sprintf("%s %s value_computed", num, op))),
+    d_abs = NA_real_,
+    d_rel = NA_real_
+  )]
+}
   }
 
   #### ---- Time-series checks ----
@@ -329,23 +332,35 @@ check.data <- function(x, col,
         return(NA)
       }
     }
-    setorderv(temp, c(by, col))
-    temp[, `:=`(.count, .N), by = by]
-    temp <- temp[.count >= (years_back + 1L)]
-    temp[, `:=`(.count, NULL)]
-    temp[, `:=`(prev_year, shift(get(col))), by = by]
-    temp[, `:=`(prev_value, shift(get(num))), by = by]
-    temp <- temp[!is.na(prev_year)]
-    temp[, `:=`(d_abs, abs(get(num) - prev_value))]
-    temp[, `:=`(d_rel, fifelse(prev_value != 0, round(abs((get(num) - 
-      prev_value)/prev_value) * 100, 0), NA_real_))]
-    abs_tol <- tolerance[1]
-    rel_tol <- tolerance[2]
-    temp[, `:=`(check, fifelse(is.na(prev_value), NA, d_abs <= 
-      abs_tol | d_rel <= rel_tol))]
-    setnames(temp, "d_abs", paste0(num, "_abs_change"))
-    setnames(temp, "d_rel", paste0(num, "_rel_change"))
-    result <- temp
+setorderv(temp, c(by, col))
+
+temp[, .count := .N, by = by]
+temp <- temp[.count >= (years_back + 1L)]
+temp[, .count := NULL]
+
+temp[, prev_year  := shift(get(col)), by = by]
+temp[, prev_value := shift(get(num)), by = by]
+temp <- temp[!is.na(prev_year)]
+
+# --- absolute and relative change (canonical columns) ---
+temp[, d_abs := abs(get(num) - prev_value)]
+
+temp[, d_rel := fifelse(
+  prev_value != 0,
+  round(abs((get(num) - prev_value) / prev_value) * 100, 0),
+  NA_real_
+)]
+
+abs_tol <- tolerance[1]
+rel_tol <- tolerance[2]
+
+temp[, check := fifelse(
+  is.na(prev_value),
+  NA,
+  d_abs <= abs_tol | d_rel <= rel_tol
+)]
+
+result <- temp
   }
   
   #### ---- Add metadata ----
